@@ -2,7 +2,7 @@
 The second hackathon at PKU-IAAS.
 
 <p align="center">
-<img src="plots/banner1.png" width="1000px" background-color="#ffffff" />
+<img src="plots/banner.png" width="1000px" background-color="#ffffff" />
 </p>
 
 ## Attendee list
