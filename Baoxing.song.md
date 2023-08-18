@@ -1,3 +1,4 @@
+
 # Run the MCScanX pipeline
 The genome sequence and genome annotation data were prepared by Zhiyu Liu
 ## Extract the protein sequences from the genome sequences and genome annotations for each species
@@ -52,3 +53,5 @@ cat /media/songlab/songlab_2023_14t/team2/data/Sorghum_bicolor.Sorghum_bicolor_N
 # Implement a strand and whole-genome duplication aware syntenic gene identification pipeline
 https://github.com/baoxingsong/quota_Anchor
 
+# Attendee
+Baoxing Song, baoxing.song@pku-iaas.edu.cn
