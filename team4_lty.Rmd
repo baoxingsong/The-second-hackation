@@ -1,0 +1,138 @@
+---
+title: "hackaton by litianyi"
+output: html_document
+---
+#一、anchorwave-proali
+## anchorwave比对
+```
+ref_genome=chr1_cs_v1_10M.fa
+query_genome=chr1_cs_v2_10M.fa
+
+ref_gff=IWGSC_v1.1_HC_20170706.gff3
+/home/huangzj/software/miniconda3/bin/anchorwave gff2seq -i ${ref_gff} -r ${ref_genome} -o chr1.conserve.cds.fa
+/home/huangzj/software/miniconda3/bin/minimap2 -x splice -t 11 -k 12 -a -p 0.4 -N 20 ${ref_genome} chr1.conserve.cds.fa > CS_v1_ref.sam
+/home/huangzj/software/miniconda3/bin/minimap2 -x splice -t 11 -k 12 -a -p 0.4 -N 20 ${query_genome} chr1.conserve.cds.fa > CS_v2_cds.sam
+/home/huangzj/software/miniconda3/bin/anchorwave proali -i ${ref_gff} -as chr1.conserve.cds.fa -r ${ref_genome} -a CS_v2_cds.sam -ar CS_v1_ref.sam -s ${query_genome} -n CS_v1_v2.anchors -o CS_v1_v2.maf -R 3 -Q 3 -t 20 -f cs_v1_v2.f.maf
+```
+##convert chain
+```
+python2 "/data/huangzj/small_test/maf-convert" chain "/data/huangzj/small_test/CS_v1_v2.maf" > "/data/huangzj/small_test/CS_v1_v2_test.chain"
+sed '/chain/{x;p;x;}' "/data/huangzj/small_test/CS_v1_v2_test.chain" > "/data/huangzj/small_test/CS_v1_v2_newtest.chain"
+```
+##直接运行picard_liftover
+```
+java -jar picard.jar LiftoverVcf I="/data/huangzj/small_test/chr1_10M_WATDE0001.vcf.gz" O="/data/huangzj/small_test/chr1_10M_WATDE0001.picard_liftover_use.vcf.gz" C="/data/huangzj/small_test/CS_v1_v2_newtest.chain" REJECT="/data/huangzj/small_test/chr1_10M_WATDE0001.picard_liftover_unmap.vcf.gz" R="/data/huangzj/small_test/chr1_cs_v2_10M.fa"
+```
+##直接运行crossmap
+```
+CrossMap.py vcf CS_v1_v2_newtest.chain chr1_10M_WATDE0001.vcf.gz chr1_cs_v2_10M.fa  --no-comp-alleles --compress chr1_10M_WATDE0001.crossmap.vcf 
+```
+##修改染色体名字
+```
+awk '{$2 = $4;print}' srcsplit_out.lift > srcsplit_out_new.lift 
+awk '{$2 = $4;print}' tgtsplit_out.lift > tgtsplit_out_new.lift
+```
+##maf转为psl（参考nextflow）
+```
+sed 's/ref.//g' CS_v1_v2.maf | sed 's/qry.//g' | maf-convert psl - | liftUp -type=.psl stdout srcsplit_out_new.lift warn stdin | liftUp -type=.psl -pslQ CS_v1_v2_new.psl tgtsplit_out_new.lift warn stdin
+```
+##psl转为chain（参考nextflow）
+```
+source="/data/huangzj/small_test/04.AnchorWave/chr1_cs_v1_10M.fa"
+target="/data/huangzj/small_test/04.AnchorWave/chr1_cs_v2_10M.fa"
+if [ `faSize -tab ${source} | awk '$1=="baseCount" {print $2}'` -lt 4000000000 ]; then
+    faToTwoBit ${source} source.2bit
+    twoBitInfo source.2bit source.sizes
+else
+    faToTwoBit -long ${source} source.2bit
+    twoBitInfo source.2bit source.sizes
+fi
+
+if [ `faSize -tab ${target} | awk '$1=="baseCount" {print $2}'` -lt 4000000000 ]; then
+      faToTwoBit ${target} target.2bit
+      twoBitInfo target.2bit target.sizes
+  else
+      faToTwoBit -long ${target} target.2bit
+      twoBitInfo target.2bit target.sizes
+  fi
+
+axtChain -minScore=5000 -linearGap=medium -verbose=0 -psl "/data/huangzj/small_test/04.AnchorWave/CS_v1_v2_new.psl" \
+source.2bit target.2bit stdout | chainAntiRepeat  source.2bit target.2bit stdin stdout > CS_v1_v2_new.chain
+```
+##chain文件优化（参考UCSC，https://genome.ucsc.edu/cgi-bin/hgTrackUi?hgsid=1362445199_8KVk8xT77Y7RKwC4d3AbkJb8E4ZL&db=hub_3267197_GCA_009914755.4&c=CP068275.2&g=hub_3267197_hgLiftOver）
+```
+python3 "/home/huangzj/software/chaintools/src/split.py" -c CS_v1_v2_new.chain -o CS_v1_v2_new-split.chain
+python3 /home/huangzj/software/chaintools/src/to_paf.py -c CS_v1_v2_new-split.chain -t chr1_cs_v1_10M.fa -q chr1_cs_v2_10M.fa -o CS_v1_v2_new-split.paf
+awk 'tolower($1)==tolower($6)' CS_v1_v2_new-split.paf | rb break-paf --max-size 10000  | rb trim-paf -r | rb invert | rb trim-paf -r | rb invert > CS_v1_v2_new-out.paf
+paf2chain -i CS_v1_v2_new-out.paf > CS_v1_v2_new-out.chain
+python3 /home/huangzj/software/chaintools/src/invert.py -c CS_v1_v2_new-out.chain -o CS_v1_v2_new-out_inverted.chain
+```
+##优化后crossmap比对
+```
+CrossMap.py vcf CS_v1_v2_new-out.chain chr1_10M_WATDE0001.vcf.gz chr1_cs_v2_10M.fa  --no-comp-alleles --compress chr1_10M_WATDE0001.crossmap_inverted.vcf 
+```
+#二、minimap
+## minimap比对
+```
+source="/data/huangzj/small_test/01.minimap2/chr1_cs_v1_10M.fa"
+target="/data/huangzj/small_test/01.minimap2/chr1_cs_v2_10M.fa"
+
+myvalue=`faSize -tab ${source} | awk '$1=="maxSize" {print $2}'`
+if [ -z $myvalue ]; then
+    myvalue=`faSize -tab ${source} | awk '$1=="baseCount" {print $2}'`
+fi
+mkdir ./SPLIT_src && chmod a+rw ./SPLIT_src
+faSplit size -oneFile -lift="/data/huangzj/small_test/01.minimap2/SPLIT_src/srcsplit_out.lift" ${source} $myvalue "/data/huangzj/small_test/01.minimap2/SPLIT_src/src"
+
+myvalue=`faSize -tab ${target} | awk '$1=="maxSize" {print $2}'`
+if [ -z $myvalue ]; then
+    myvalue=`faSize -tab ${target} | awk '$1=="baseCount" {print $2}'`
+fi
+mkdir ./SPLIT_tgt && chmod a+rw ./SPLIT_tgt
+faSplit size -oneFile -lift="/data/huangzj/small_test/01.minimap2/SPLIT_tgt/tgtsplit_out.lift" ${target} $myvalue "/data/huangzj/small_test/01.minimap2/SPLIT_tgt/tgt"
+
+minimap2 -t 20 -cx asm5 --cs=long "/data/huangzj/small_test/01.minimap2/SPLIT_src/src.fa" "/data/huangzj/small_test/01.minimap2/SPLIT_tgt/tgt.fa" > "/data/huangzj/small_test/01.minimap2/CS_v1_v2_new.paf" 
+```
+##paf2chain（参考nextflow）
+```
+paftools.js view -f maf "/data/huangzj/small_test/01.minimap2/CS_v1_v2_new.paf"  - |
+        maf-convert  psl -|
+  liftUp -type=.psl stdout "/data/huangzj/small_test/01.minimap2/SPLIT_src/srcsplit_out.lift" warn stdin  |
+  liftUp -type=.psl -pslQ "/data/huangzj/small_test/01.minimap2/CS_v1_v2_new.psl" "/data/huangzj/small_test/01.minimap2/SPLIT_tgt/tgtsplit_out.lift" warn stdin 
+```
+##psl 转 chain（参考nextflow）
+```
+source="/data/huangzj/small_test/01.minimap2/chr1_cs_v1_10M.fa"
+target="/data/huangzj/small_test/01.minimap2/chr1_cs_v2_10M.fa"
+if [ `faSize -tab ${source} | awk '$1=="baseCount" {print $2}'` -lt 4000000000 ]; then
+    faToTwoBit ${source} source.2bit
+    twoBitInfo source.2bit source.sizes
+else
+    faToTwoBit -long ${source} source.2bit
+    twoBitInfo source.2bit source.sizes
+fi
+
+if [ `faSize -tab ${target} | awk '$1=="baseCount" {print $2}'` -lt 4000000000 ]; then
+      faToTwoBit ${target} target.2bit
+      twoBitInfo target.2bit target.sizes
+  else
+      faToTwoBit -long ${target} target.2bit
+      twoBitInfo target.2bit target.sizes
+  fi
+
+axtChain -minScore=5000 -linearGap=medium -verbose=0 -psl "/data/huangzj/small_test/01.minimap2/CS_v1_v2_new.psl" \
+source.2bit target.2bit stdout | chainAntiRepeat  source.2bit target.2bit stdin stdout > CS_v1_v2_new.chain
+```
+##crossmap测试
+```
+CrossMap.py vcf CS_v1_v2_new.chain chr1_10M_WATDE0001.vcf.gz chr1_cs_v2_10M.fa  --no-comp-alleles --compress chr1_10M_WATDE0001.crossmap.vcf 
+bzip "/data/huangzj/small_test/01.minimap2/chr1_10M_WATDE0001.crossmap.vcf.unmap" > "/data/huangzj/small_test/01.minimap2/chr1_10M_WATDE0001.crossmap.vcf.unmap.gz"
+```
+##继续进行chain处理（参考UCSC）
+python3 "/home/huangzj/software/chaintools/src/split.py" -c CS_v1_v2_new.chain -o CS_v1_v2_new-split.chain
+python3 /home/huangzj/software/chaintools/src/to_paf.py -c CS_v1_v2_new-split.chain -t chr1_cs_v1_10M.fa -q chr1_cs_v2_10M.fa -o CS_v1_v2_new-split.paf
+awk 'tolower($1)==tolower($6)' CS_v1_v2_new-split.paf | rb break-paf --max-size 10000  | rb trim-paf -r | rb invert | rb trim-paf -r | rb invert > CS_v1_v2_new-out.paf
+paf2chain -i CS_v1_v2_new-out.paf > CS_v1_v2_new-out.chain
+python3 /home/huangzj/software/chaintools/src/invert.py -c CS_v1_v2_new-out.chain -o CS_v1_v2_new-out_inverted.chain
+##优化文件后crossmap结果
+CrossMap.py vcf CS_v1_v2_new-out.chain chr1_10M_WATDE0001.vcf.gz chr1_cs_v2_10M.fa  --no-comp-alleles --compress chr1_10M_WATDE0001.crossmap.trim.vcf 

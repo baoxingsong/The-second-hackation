@@ -1,0 +1,79 @@
+##package GENESPACE depends on R,orthofinder,MCScanX.
+#install MCScanX,construct MCscan enviroment 
+conda create -n MCscan
+#activate environment
+conda activate MCscan
+#construct directory to store MCScanX
+mkdir mc
+cd mc 
+mkdir MCScanX
+cd MCScanX
+#install MCScanX
+git clone https://github.com/wyp1125/MCScanX.git
+cd MCScanX
+make
+#installing orthofinder and R in the same environment 
+conda install -c bioconda orthofinder 
+conda install R
+#run R and install GENESPACE
+R
+if (!requireNamespace("devtools", quietly = TRUE))
+    install.packages("devtools")
+devtools::install_github("jtlovell/GENESPACE")
+
+if (!requireNamespace("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+BiocManager::install(c("Biostrings", "rtracklayer"))
+
+
+
+
+
+###the below data derived from ncbi that includes three species's data  and   package genespace  needs that data derived from ncbi or phytozome.It will make process becoming complex if the rawdata from other source.
+###You can create zea_sorghum_osa_ncbi/rawGenomes/zea_mays/ directory ,zea_sorghum_osa_ncbi/rawGenomes/oryza_sativa/ directory , zea_sorghum_osa_ncbi rawGenomes/sorghum_bicolor/ directory and /zea_sorghum_osa_ncbi/workingDirectory in the below path.
+
+
+in the path: /home/songlab/mc/zea_sorghum_osa_ncbi/rawGenomes/zea_mays/   wget https://ftp.ncbi.nlm.nih.gov/genomes/refseq/plant/Zea_mays/latest_assembly_versions/GCF_902167145.1_Zm-B73-REFERENCE-NAM-5.0/GCF_902167145.1_Zm-B73-REFERENCE-NAM-5.0_genomic.gff.gz
+
+wget https://ftp.ncbi.nlm.nih.gov/genomes/refseq/plant/Zea_mays/latest_assembly_versions/GCF_902167145.1_Zm-B73-REFERENCE-NAM-5.0/GCF_902167145.1_Zm-B73-REFERENCE-NAM-5.0_translated_cds.faa.gz
+
+in the path: /home/songlab/mc/zea_sorghum_osa_ncbi/rawGenomes/oryza_sativa/  wget https://ftp.ncbi.nlm.nih.gov/genomes/refseq/plant/Oryza_sativa/latest_assembly_versions/GCF_001433935.1_IRGSP-1.0/GCF_001433935.1_IRGSP-1.0_translated_cds.faa.gz
+
+wget https://ftp.ncbi.nlm.nih.gov/genomes/refseq/plant/Oryza_sativa/latest_assembly_versions/GCF_001433935.1_IRGSP-1.0/GCF_001433935.1_IRGSP-1.0_genomic.gff.gz
+
+in the path:  /home/songlab/mc/zea_sorghum_osa_ncbi/rawGenomes/sorghum_bicolor/ wget https://ftp.ncbi.nlm.nih.gov/genomes/refseq/plant/Sorghum_bicolor/latest_assembly_versions/GCF_000003195.3_Sorghum_bicolor_NCBIv3/GCF_000003195.3_Sorghum_bicolor_NCBIv3_translated_cds.faa.gz
+
+wget https://ftp.ncbi.nlm.nih.gov/genomes/refseq/plant/Sorghum_bicolor/latest_assembly_versions/GCF_000003195.3_Sorghum_bicolor_NCBIv3/GCF_000003195.3_Sorghum_bicolor_NCBIv3_genomic.gff.gz
+
+#activate environment
+conda activate MCscan
+
+#running R,you can input the following code 
+
+R
+
+###############################################
+# -- change paths to those valid on your system
+genomeRepo <- "/home/songlab/mc/zea_sorghum_osa_ncbi/rawGenomes"
+wd <- "/home/songlab/mc/zea_sorghum_osa_ncbi/workingDirectory"
+path2mcscanx <- "/home/songlab/mc/MCScanX/"
+###############################################
+
+
+
+# -- parse the annotations to fastas with headers that match a gene bed file
+parsedPaths <- parse_annotations(
+  rawGenomeRepo = genomeRepo,
+  genomeDirs = c("sorghum_bicolor", "zea_mays","oryza_sativa"),
+  genomeIDs = c("sor", "zea","osa"),
+  presets = "ncbi",
+  genespaceWd = wd)
+
+# -- initalize the run and QC the inputs
+gpar <- init_genespace(
+  wd = wd, 
+  path2mcscanx = path2mcscanx)
+
+# -- accomplish the run and result is located under the workingDirectory
+out <- run_genespace(gpar)
+

@@ -1,0 +1,64 @@
+https://ftp.ensemblgenomes.ebi.ac.uk/pub/plants/release-57/fasta/setaria_viridis/dna/Setaria_viridis.Setaria_viridis_v2.0.dna.toplevel.fa.gz       #setaria_viridis dna.fasta
+
+https://ftp.ensemblgenomes.ebi.ac.uk/pub/plants/release-57/gff3/setaria_viridis/Setaria_viridis.Setaria_viridis_v2.0.57.gff3.gz                 #setaria_viridis  dna.gff
+
+https://ftp.ensemblgenomes.ebi.ac.uk/pub/plants/release-57/fasta/sorghum_bicolor/dna/Sorghum_bicolor.Sorghum_bicolor_NCBIv3.dna.toplevel.fa.gz         #sorghum_bicolor   dna.fasta
+
+https://ftp.ensemblgenomes.ebi.ac.uk/pub/plants/release-57/gff3/sorghum_bicolor/Sorghum_bicolor.Sorghum_bicolor_NCBIv3.57.gff3.gz                    #sorghum_bicolor   dna.gff
+
+https://ftp.ensemblgenomes.ebi.ac.uk/pub/plants/release-57/fasta/oryza_sativa/dna/Oryza_sativa.IRGSP-1.0.dna.toplevel.fa.gz                          # oryza_sativa   dna.fasta
+
+https://ftp.ensemblgenomes.ebi.ac.uk/pub/plants/release-57/gff3/oryza_sativa/Oryza_sativa.IRGSP-1.0.57.gff3.gz                                       # oryza_sativa   dna.gff
+
+
+
+makeblastdb -in Oryza_sativa.IRGSP-1.0.pep.all.fa -dbtype prot -parse_seqids -out os.db         #blast软件创建数据库  
+
+blastall  -i  Setaria_viridis.Setaria_viridis_v2.0.pep.all.fa  -d os.db -p blastp -e 1e-10 -b 5 -v 5 -m 8 -o os_se.blast     #blastp比对   速度太慢 用diamond代替
+
+###Extract gff files(chromosome name,transcriptid,start,end) from blast results
+grep '[[:blank:]]mRNA[[:blank:]]' Oryza_sativa.IRGSP-1.0.57.gff3 | cut -f 1,4,5,9 | awk '{print $1"\t"$2"\t"$3"\t"$4}' > os.gff
+grep '[[:blank:]]mRNA[[:blank:]]' Setaria_viridis.Setaria_viridis_v2.0.57.gff3 | cut -f 1,4,5,9 | awk '{print $1"\t"$2"\t"$3"\t"$4}' > se.gff       #下面awk代码更加好用
+# Use excel to further modify( edit chromosome name(os1,os2.....,se1,se2.....) and merge two gff files) 
+ 
+MCScanX os_se
+
+#Warning: [blastp] Query_34548 Os09t0277100-.. : Could not calculate ungapped Karlin-Altschul parameters due to an invalid query sequence or its translation. Please verify the query sequence(s) and/or filtering options  运行blastp遇到的Warning
+
+
+#multi species compare
+/media/songlab/songlab_2023_14t/team2/MCScan/multi  cat Zea_mays.Zm-B73-REFERENCE-NAM-5.0.pep.all.fa   Sorghum_bicolor.Sorghum_bicolor_NCBIv3.pep.all.fa  Setaria_viridis.Setaria_viridis_v2.0.pep.all.fa  Oryza_sativa.IRGSP-1.0.pep.all.fa > merge.fa
+/media/songlab/songlab_2023_14t/team2/MCScan/multi  makeblastdb -in merge.fa -dbtype prot -parse_seqids -out merge.db
+/media/songlab/songlab_2023_14t/team2/MCScan/multi  blastall  -i  Zea_mays.Zm-B73-REFERENCE-NAM-5.0.pep.all.fa  -d merge.db -p blastp -e 1e-10 -b 5 -v 5 -m 8 -o zm.blast  &
+/media/songlab/songlab_2023_14t/team2/MCScan/multi  blastall  -i  Sorghum_bicolor.Sorghum_bicolor_NCBIv3.pep.all.fa  -d merge.db -p blastp -e 1e-10 -b 5 -v 5 -m 8 -o sb.blast  &
+/media/songlab/songlab_2023_14t/team2/MCScan/multi  blastall  -i  Setaria_viridis.Setaria_viridis_v2.0.pep.all.fa  -d merge.db -p blastp -e 1e-10 -b 5 -v 5 -m 8 -o sv.blast  & 
+/media/songlab/songlab_2023_14t/team2/MCScan/multi  blastall  -i  Oryza_sativa.IRGSP-1.0.pep.all.fa  -d merge.db -p blastp -e 1e-10 -b 5 -v 5 -m 8 -o os.blast  &
+/media/songlab/songlab_2023_14t/team2/MCScan/multi  cat zm.blast sb.blast sv.blast os.blast > merge.blast         ##合并blastp结果文件
+
+## Format the gff files
+/media/songlab/songlab_2023_14t/team2/MCScan/multi  grep '\smRNA\s' Setaria_viridis.Setaria_viridis_v2.0.57.gff3 | awk '{print "sv"$1"\t"$4"\t"$5"\t"$9}' |awk -F 'ID=' '{print $1$2}'|awk -F 'Parent=' '{print $1}'|awk '{print $1"\t"$4"\t"$2"\t"$3}' | awk -F 'transcript:' '{print $1$2}' | awk -F ';' '{print $1$2}' > sv.gff
+/media/songlab/songlab_2023_14t/team2/MCScan/multi  grep '\smRNA\s' Zea_mays.Zm-B73-REFERENCE-NAM-5.0.57.gff3 | awk '{print "zm"$1"\t"$4"\t"$5"\t"$9}' |awk -F 'ID=' '{print $1$2}'|awk -F 'Parent=' '{print $1}'|awk '{print $1"\t"$4"\t"$2"\t"$3}' | awk -F 'transcript:' '{print $1$2}' | awk -F ';' '{print $1$2}' > zm.gff
+/media/songlab/songlab_2023_14t/team2/MCScan/multi  grep '\smRNA\s' Sorghum_bicolor.Sorghum_bicolor_NCBIv3.57.gff3 | awk '{print "sb"$1"\t"$4"\t"$5"\t"$9}' |awk -F 'ID=' '{print $1$2}'|awk -F 'Parent=' '{print $1}'|awk '{print $1"\t"$4"\t"$2"\t"$3}' | awk -F 'transcript:' '{print $1$2}' | awk -F ';' '{print $1$2}' > sb.gff
+/media/songlab/songlab_2023_14t/team2/MCScan/multi  grep '\smRNA\s' Oryza_sativa.IRGSP-1.0.57.gff3 | awk '{print "os"$1"\t"$4"\t"$5"\t"$9}' |awk -F 'ID=' '{print $1$2}'|awk -F 'Parent=' '{print $1}'|awk '{print $1"\t"$4"\t"$2"\t"$3}' | awk -F 'transcript:' '{print $1$2}' | awk -F ';' '{print $1$2}' > os.gff
+/media/songlab/songlab_2023_14t/team2/MCScan/multi  cat sv.gff zm.gff sb.gff os.gff > merge.gff        #合并处理过的gff文件
+/media/songlab/songlab_2023_14t/team2/MCScan/multi  MCScanX merge 
+
+
+
+#diamond replace blast 
+/media/songlab/songlab_2023_14t/team2/MCScan/multi   ~/diamond makedb --in merge.fa --db mer             # 创建数据库
+/media/songlab/songlab_2023_14t/team2/MCScan/multi  ~/diamond blastp --db mer -q Zea_mays.Zm-B73-REFERENCE-NAM-5.0.pep.all.fa -o dzm.blast      #蛋白序列比对                                                                                             
+/media/songlab/songlab_2023_14t/team2/MCScan/multi  ~/diamond blastp --db mer -q Oryza_sativa.IRGSP-1.0.pep.all.fa -o dos.blast                                                                                                            
+/media/songlab/songlab_2023_14t/team2/MCScan/multi  ~/diamond blastp --db mer -q Setaria_viridis.Setaria_viridis_v2.0.pep.all.fa -o dsv.blast                                                                                              
+/media/songlab/songlab_2023_14t/team2/MCScan/multi  ~/diamond blastp --db mer -q Sorghum_bicolor.Sorghum_bicolor_NCBIv3.pep.all.fa -o dsb.blast
+/media/songlab/songlab_2023_14t/team2/MCScan/multi  cat dzm.blast dsb.blast dsv.blast dos.blast > dmerge.blast
+
+
+
+#wgdi 
+/media/songlab/songlab_2023_14t/team2/WGDI     ~/diamond makedb --in os.pep.all.fa --db os                                                                                                                                            
+/media/songlab/songlab_2023_14t/team2/WGDI     ~/diamond blastp --db os -q os.pep.all.fa -o os.blast 
+
+
+
+
